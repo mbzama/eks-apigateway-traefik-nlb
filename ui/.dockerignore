@@ -1,0 +1,38 @@
+# Dependencies (reinstalled inside the image)
+node_modules/
+.pnpm-store/
+
+# Build output (rebuilt inside the image)
+.next/
+out/
+
+# Environment files
+.env
+.env.*
+
+# Logs
+logs/
+*.log
+
+# Git
+.git/
+.gitignore
+
+# Docker
+.dockerignore
+Dockerfile
+
+# CI / deployment scripts
+deploy.sh
+run.sh
+
+# Tests
+coverage/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/

@@ -1,0 +1,58 @@
+import type { Product } from '@/types/product'
+
+export const products: Product[] = [
+  {
+    id: '1',
+    name: 'Wireless Headphones',
+    description: 'Premium noise-cancelling wireless headphones with 30-hour battery life.',
+    price: 149.99,
+    image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=400&fit=crop',
+    category: 'Electronics',
+    stock: 25,
+  },
+  {
+    id: '2',
+    name: 'Running Sneakers',
+    description: 'Lightweight and breathable running shoes for everyday training.',
+    price: 89.99,
+    image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&h=400&fit=crop',
+    category: 'Footwear',
+    stock: 40,
+  },
+  {
+    id: '3',
+    name: 'Leather Backpack',
+    description: 'Handcrafted genuine leather backpack with laptop compartment.',
+    price: 199.99,
+    image: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&h=400&fit=crop',
+    category: 'Bags',
+    stock: 15,
+  },
+  {
+    id: '4',
+    name: 'Smartwatch',
+    description: 'Feature-rich smartwatch with health tracking and GPS.',
+    price: 299.99,
+    image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=400&fit=crop',
+    category: 'Electronics',
+    stock: 20,
+  },
+  {
+    id: '5',
+    name: 'Sunglasses',
+    description: 'Polarized UV400 sunglasses with titanium frame.',
+    price: 129.99,
+    image: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&h=400&fit=crop',
+    category: 'Accessories',
+    stock: 50,
+  },
+  {
+    id: '6',
+    name: 'Mechanical Keyboard',
+    description: 'Compact TKL mechanical keyboard with blue switches and RGB backlight.',
+    price: 119.99,
+    image: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=400&h=400&fit=crop',
+    category: 'Electronics',
+    stock: 30,
+  },
+]

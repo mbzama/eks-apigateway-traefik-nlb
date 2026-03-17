@@ -268,6 +268,183 @@ eks-traefik/
 
 ---
 
+## Debugging & Troubleshooting
+
+### kubectl — Cluster Overview
+
+```bash
+# Configure kubectl
+aws eks update-kubeconfig --region us-east-1 --name hrms-cluster
+
+# All pods across all namespaces
+kubectl get pods -A
+
+# Pods in each app namespace
+kubectl get pods -n mock-api
+kubectl get pods -n mock-web
+kubectl get pods -n test-system   # Traefik
+```
+
+---
+
+### Application Logs
+
+**mock-api (NestJS)**
+```bash
+# Live logs
+kubectl logs -n mock-api -l app=mock-api -f
+
+# Last 100 lines
+kubectl logs -n mock-api -l app=mock-api --tail=100
+
+# Previous container (if pod restarted)
+kubectl logs -n mock-api -l app=mock-api --previous
+```
+
+**mock-web (Next.js)**
+```bash
+kubectl logs -n mock-web -l app=mock-web -f
+kubectl logs -n mock-web -l app=mock-web --tail=100
+```
+
+**Traefik**
+```bash
+# Access logs (shows every routed request with matched rule)
+kubectl logs -n test-system -l app.kubernetes.io/name=traefik -f
+
+# Last 50 lines
+kubectl logs -n test-system -l app.kubernetes.io/name=traefik --tail=50
+```
+
+**API Gateway (CloudWatch)**
+```bash
+# Tail live API Gateway access logs
+aws logs tail /aws/apigateway/hrms-api-gateway --region us-east-1 --follow
+
+# Last 20 entries
+aws logs tail /aws/apigateway/hrms-api-gateway --region us-east-1 --since 10m
+```
+
+---
+
+### Traffic Flow Diagnostics
+
+#### Step 1 — Verify pods are Running and Ready
+
+```bash
+kubectl get pods -n mock-api -o wide
+kubectl get pods -n mock-web -o wide
+kubectl get pods -n test-system -o wide
+```
+
+Expected: all pods `1/1 Running`.
+
+#### Step 2 — Verify Services and ClusterIP
+
+```bash
+kubectl get svc -n mock-api
+kubectl get svc -n mock-web
+kubectl get svc -n test-system   # Traefik LoadBalancer — check EXTERNAL-IP
+```
+
+#### Step 3 — Verify Traefik IngressRoutes
+
+```bash
+# List all IngressRoutes across namespaces
+kubectl get ingressroute -A
+
+# Describe a specific route
+kubectl describe ingressroute mock-api  -n mock-api
+kubectl describe ingressroute mock-web  -n mock-web
+```
+
+#### Step 4 — Test connectivity inside the cluster
+
+```bash
+# Exec into a pod and curl the API service directly
+kubectl run curl --image=curlimages/curl -it --rm --restart=Never -- \
+  curl -s http://mock-api.mock-api.svc.cluster.local/api/users
+
+# Curl the UI service directly
+kubectl run curl --image=curlimages/curl -it --rm --restart=Never -- \
+  curl -s -o /dev/null -w "%{http_code}" http://mock-web.mock-web.svc.cluster.local/
+```
+
+#### Step 5 — Verify NLB is active
+
+```bash
+# Check Traefik LoadBalancer hostname
+kubectl get svc traefik -n test-system -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+
+# Check NLB state in AWS
+aws elbv2 describe-load-balancers --region us-east-1 \
+  --query 'LoadBalancers[?contains(DNSName,`ac7bcc3cc0477485881ff3b8b8fd2c87`)].{State:State.Code,Scheme:Scheme,Type:Type}'
+```
+
+#### Step 6 — Verify VPC Link is AVAILABLE
+
+```bash
+aws apigatewayv2 get-vpc-links --region us-east-1 \
+  --query 'Items[].{Name:Name,Status:VpcLinkStatus,Message:VpcLinkStatusMessage}'
+```
+
+#### Step 7 — Test the full end-to-end path
+
+```bash
+# API
+curl -sv https://7r0mkgh9d7.execute-api.us-east-1.amazonaws.com/mock/api/users 2>&1 | grep "< HTTP"
+
+# UI
+curl -sv https://7r0mkgh9d7.execute-api.us-east-1.amazonaws.com/web/ 2>&1 | grep "< HTTP"
+```
+
+---
+
+### Common Issues
+
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| `403 Forbidden` from API Gateway | No matching route / VPC Link not ready | Check route keys with `aws apigatewayv2 get-routes --api-id 7r0mkgh9d7`; wait for VPC Link to become `AVAILABLE` |
+| `404` from Traefik | Host header mismatch | Confirm `overwrite:header.Host` matches the IngressRoute `Host()` rule |
+| `ImagePullBackOff` | Wrong image platform (ARM vs AMD64) | Rebuild with `--platform linux/amd64` using `docker buildx` |
+| Pod stuck in `Pending` | Insufficient node capacity | Check `kubectl describe pod <name> -n <ns>` for scheduling events |
+| Pod `CrashLoopBackOff` | App startup failure | Check logs with `kubectl logs -n <ns> -l app=<name> --previous` |
+| Node group `CREATE_FAILED` | NAT Gateway not ready when nodes bootstrapped | Ensure NAT Gateway and private route table exist before creating the node group |
+| Traefik `IngressRoute` CRD not found | Traefik Helm chart not installed yet | Run `terraform apply -target=helm_release.traefik` first |
+
+---
+
+### Describe Resources
+
+```bash
+# Describe a failing pod (shows Events with error details)
+kubectl describe pod -n mock-api -l app=mock-api
+kubectl describe pod -n mock-web -l app=mock-web
+
+# Describe Traefik deployment
+kubectl describe deployment traefik -n test-system
+
+# Check node health
+kubectl get nodes
+kubectl describe node <node-name>
+```
+
+---
+
+### Restart / Force Re-pull
+
+```bash
+# Restart a deployment (triggers rolling update, re-pulls image)
+kubectl rollout restart deployment/mock-api -n mock-api
+kubectl rollout restart deployment/mock-web -n mock-web
+
+# Watch rollout status
+kubectl rollout status deployment/mock-api -n mock-api
+kubectl rollout status deployment/mock-web -n mock-web
+```
+
+---
+
 ## Destroy
 
 ```bash

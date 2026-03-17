@@ -105,6 +105,11 @@ output "api_gateway_domain_name" {
   value       = var.custom_domain_name != "" ? aws_apigatewayv2_domain_name.main[0].domain_name_configuration[0].target_domain_name : "Custom domain not configured"
 }
 
+output "ui_endpoint" {
+  description = "API Gateway endpoint for the Next.js UI"
+  value       = "${aws_apigatewayv2_api.main.api_endpoint}/web/"
+}
+
 output "example_requests" {
   description = "Example curl commands to test the full traffic flow"
   value       = <<-EOT

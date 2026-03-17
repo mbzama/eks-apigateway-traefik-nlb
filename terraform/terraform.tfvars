@@ -35,6 +35,12 @@ app_replicas  = 1
 app_host      = "api.app-dev.example.com"
 app_image = "zamamb/mock-api:latest"
 
+# UI
+ui_namespace = "mock-web"
+ui_image     = "zamamb/mock-web:latest"
+ui_replicas  = 1
+ui_host      = "web.app-dev.example.com"
+
 # API Gateway
 api_gateway_name = "hrms-api-gateway"
 # custom_domain_name  = "api.app-dev.example.com"

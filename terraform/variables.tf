@@ -145,6 +145,33 @@ variable "app_host" {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# UI
+# ─────────────────────────────────────────────────────────────────────────────
+variable "ui_namespace" {
+  description = "Kubernetes namespace for the Next.js UI"
+  type        = string
+  default     = "mock-web"
+}
+
+variable "ui_image" {
+  description = "Full container image URI for the Next.js UI"
+  type        = string
+  default     = "zamamb/mock-web:latest"
+}
+
+variable "ui_replicas" {
+  description = "Number of Next.js pod replicas"
+  type        = number
+  default     = 1
+}
+
+variable "ui_host" {
+  description = "Host header value that Traefik uses to route traffic to the UI"
+  type        = string
+  default     = "web.app-dev.example.com"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # API Gateway
 # ─────────────────────────────────────────────────────────────────────────────
 variable "api_gateway_name" {

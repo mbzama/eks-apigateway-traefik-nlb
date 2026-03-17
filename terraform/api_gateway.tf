@@ -79,6 +79,44 @@ resource "aws_apigatewayv2_route" "mock_proxy" {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Integration – UI (Next.js)
+#
+# Same VPC Link / NLB as the API integration, but sets a different Host header
+# so Traefik routes to the mock-web service instead of mock-api.
+# ─────────────────────────────────────────────────────────────────────────────
+resource "aws_apigatewayv2_integration" "traefik_ui" {
+  api_id             = aws_apigatewayv2_api.main.id
+  integration_type   = "HTTP_PROXY"
+  integration_method = "ANY"
+
+  integration_uri = data.aws_lb_listener.traefik_http.arn
+
+  connection_type = "VPC_LINK"
+  connection_id   = aws_apigatewayv2_vpc_link.main.id
+
+  # Strip the /web prefix: /web/{proxy+} → /{proxy+}
+  # Set Host header so Traefik IngressRoute matches the UI service
+  request_parameters = {
+    "overwrite:path"        = "/$request.path.proxy"
+    "overwrite:header.Host" = var.ui_host
+  }
+
+  payload_format_version = "1.0"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Route – ANY /web/{proxy+}
+#
+# Matches any HTTP method and any path under /web/.
+# Example: GET /web/products  →  integration above  →  Traefik  →  mock-web
+# ─────────────────────────────────────────────────────────────────────────────
+resource "aws_apigatewayv2_route" "web_proxy" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "ANY /web/{proxy+}"
+  target    = "integrations/${aws_apigatewayv2_integration.traefik_ui.id}"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Stage – $default  (auto-deploy enabled)
 #
 # The $default stage is the implicit catch-all stage for HTTP APIs.

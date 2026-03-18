@@ -43,6 +43,5 @@ ui_host      = "web.app-dev.example.com"
 
 # API Gateway
 api_gateway_name = "hrms-api-gateway"
-# custom_domain_name  = "api.app-dev.example.com"
-# acm_certificate_arn = "arn:aws:acm:us-east-1:<account>:certificate/<id>"
-# ↑ Uncomment if you have a Route53-managed domain and ACM certificate.
+custom_domain_name  = "dev.zamait.in"
+acm_certificate_arn = "arn:aws:acm:us-east-1:805702559304:certificate/d57a2150-bbe6-49e5-94b3-de1bc26dc219"

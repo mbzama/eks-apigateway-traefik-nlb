@@ -114,11 +114,8 @@ output "example_requests" {
   description = "Example curl commands to test the full traffic flow"
   value       = <<-EOT
     # Default endpoint (no custom domain):
-    curl ${aws_apigatewayv2_api.main.api_endpoint}/mock/api/users \
-      -H "Host: ${var.app_host}"
-
-    curl ${aws_apigatewayv2_api.main.api_endpoint}/mock/api/products \
-      -H "Host: ${var.app_host}"
+    curl ${aws_apigatewayv2_api.main.api_endpoint}/mock/api/users
+    curl ${aws_apigatewayv2_api.main.api_endpoint}/mock/api/products
 
     # If custom domain is configured:
     # curl https://${var.custom_domain_name}/mock/api/users

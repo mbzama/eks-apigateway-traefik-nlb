@@ -94,7 +94,10 @@ resource "helm_release" "traefik" {
       additionalArguments = [
         "--log.level=INFO",
         "--accesslog=true",
-        "--entrypoints.web.forwardedHeaders.insecure=true",
+        # Trust X-Forwarded-* headers only from within the VPC (API Gateway VPC Link).
+        # Using trustedIPs instead of insecure=true prevents clients outside the VPC
+        # from spoofing forwarded headers.
+        "--entrypoints.web.forwardedHeaders.trustedIPs=${var.vpc_cidr}",
       ]
     })
   ]

@@ -66,15 +66,16 @@ resource "kubernetes_deployment" "mock_api" {
             }
           }
 
+          # Liveness: TCP check confirms the process is alive without hitting a data endpoint
           liveness_probe {
-            http_get {
-              path = "/api/users"
+            tcp_socket {
               port = 3000
             }
             initial_delay_seconds = 15
             period_seconds        = 20
           }
 
+          # Readiness: HTTP check confirms the app can serve requests
           readiness_probe {
             http_get {
               path = "/api/users"

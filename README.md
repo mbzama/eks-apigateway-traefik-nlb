@@ -8,8 +8,12 @@ A NestJS mock API and Next.js UI deployed on AWS EKS, routed through Traefik ing
 
 | Service | URL |
 |---------|-----|
-| **UI** (Next.js / Digital Commerce) | `https://7r0mkgh9d7.execute-api.us-east-1.amazonaws.com/web/` |
-| **API** (NestJS / mock-api) | `https://7r0mkgh9d7.execute-api.us-east-1.amazonaws.com/mock/` |
+| **UI** (Next.js / Digital Commerce) | `https://dev.zamait.in/web/` |
+| **API** (NestJS / mock-api) | `https://dev.zamait.in/mock/` |
+
+> Direct API Gateway endpoints (no custom domain):
+> - UI: `https://efbt5187l6.execute-api.us-east-1.amazonaws.com/web/`
+> - API: `https://efbt5187l6.execute-api.us-east-1.amazonaws.com/mock/`
 
 ---
 
@@ -80,7 +84,7 @@ flowchart TD
 
 | Step | Component | Detail |
 |------|-----------|--------|
-| 1 | Client | `GET https://<api-gw>/mock/api/users` |
+| 1 | Client | `GET https://dev.zamait.in/mock/api/users` |
 | 2 | API Gateway | Matches `ANY /mock/{proxy+}`, rewrites path → `/api/users`, sets `Host: api.app-dev.example.com` |
 | 3 | VPC Link | Routes into the private VPC |
 | 4 | Internal NLB | Forwards to Traefik NodePort |
@@ -91,7 +95,7 @@ flowchart TD
 
 | Step | Component | Detail |
 |------|-----------|--------|
-| 1 | Client | `GET https://<api-gw>/web/` |
+| 1 | Client | `GET https://dev.zamait.in/web/` |
 | 2 | API Gateway | Matches `ANY /web/{proxy+}`, rewrites path → `/`, sets `Host: web.app-dev.example.com` |
 | 3 | VPC Link | Routes into the private VPC |
 | 4 | Internal NLB | Forwards to Traefik NodePort |
@@ -158,7 +162,32 @@ Then re-apply:
 cd terraform && terraform apply -auto-approve
 ```
 
-### 3. Configure kubectl
+### 3. Configure Custom Domain (optional)
+
+Set the following in `terraform/terraform.tfvars`:
+
+```hcl
+custom_domain_name  = "dev.zamait.in"
+acm_certificate_arn = "arn:aws:acm:us-east-1:<account-id>:certificate/<cert-id>"
+```
+
+Apply:
+```bash
+terraform apply \
+  -target=aws_apigatewayv2_domain_name.main \
+  -target=aws_apigatewayv2_api_mapping.main \
+  -auto-approve
+```
+
+Then add a **CNAME** record in your DNS provider:
+
+| Name | Type | Value |
+|------|------|-------|
+| `dev` | `CNAME` | `<api_gateway_domain_name output>` |
+
+> The `api_gateway_domain_name` output from `terraform apply` gives the target value for the CNAME.
+
+### 4. Configure kubectl
 
 ```bash
 aws eks update-kubeconfig --region us-east-1 --name hrms-cluster
@@ -168,7 +197,7 @@ aws eks update-kubeconfig --region us-east-1 --name hrms-cluster
 
 ## API Endpoints
 
-Base URL: `https://7r0mkgh9d7.execute-api.us-east-1.amazonaws.com/mock`
+Base URL: `https://dev.zamait.in/mock`
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -187,16 +216,16 @@ Base URL: `https://7r0mkgh9d7.execute-api.us-east-1.amazonaws.com/mock`
 
 ```bash
 # List users
-curl https://7r0mkgh9d7.execute-api.us-east-1.amazonaws.com/mock/api/users
+curl https://dev.zamait.in/mock/api/users
 
 # List products
-curl https://7r0mkgh9d7.execute-api.us-east-1.amazonaws.com/mock/api/products
+curl https://dev.zamait.in/mock/api/products
 
 # Get single user
-curl https://7r0mkgh9d7.execute-api.us-east-1.amazonaws.com/mock/api/users/1
+curl https://dev.zamait.in/mock/api/users/1
 
 # Create user
-curl -X POST https://7r0mkgh9d7.execute-api.us-east-1.amazonaws.com/mock/api/users \
+curl -X POST https://dev.zamait.in/mock/api/users \
   -H "Content-Type: application/json" \
   -d '{"name":"Dan Brown","email":"dan@example.com","role":"user"}'
 ```
@@ -205,7 +234,7 @@ curl -X POST https://7r0mkgh9d7.execute-api.us-east-1.amazonaws.com/mock/api/use
 
 ## UI
 
-Base URL: `https://7r0mkgh9d7.execute-api.us-east-1.amazonaws.com/web`
+Base URL: `https://dev.zamait.in/web`
 
 | Path | Description |
 |------|-------------|
@@ -265,6 +294,8 @@ eks-traefik/
 4. **Two-stage apply required** — The Kubernetes/Helm providers cannot be configured until the EKS cluster exists, and the `IngressRoute` CRD cannot be applied until Traefik is installed. Apply order: `aws_eks_cluster.main` → `helm_release.traefik` → full apply.
 5. **ARM64 image on AMD64 nodes** — Docker Hub image was ARM64-only. Rebuilt with `--platform linux/amd64` using `docker buildx`.
 6. **API Gateway Host header** — API Gateway replaces the Host header with the NLB hostname. Fixed by adding `overwrite:header.Host` to each integration's `request_parameters`.
+7. **Next.js `basePath` caused double-path routing** — Adding `basePath: '/web'` to `next.config.ts` combined with API Gateway forwarding `/web/$proxy` resulted in the app being accessible only at `/web/web`. Resolved by removing `basePath` from Next.js and reverting the API Gateway path rewrite to strip `/web` before forwarding.
+8. **Docker build cache served stale image** — After reverting `basePath`, `docker buildx` reused cached `amd64` layers that still contained the old config. Fixed by rebuilding with `--no-cache`.
 
 ---
 
@@ -392,10 +423,10 @@ aws apigatewayv2 get-vpc-links --region us-east-1 \
 
 ```bash
 # API
-curl -sv https://7r0mkgh9d7.execute-api.us-east-1.amazonaws.com/mock/api/users 2>&1 | grep "< HTTP"
+curl -sv https://dev.zamait.in/mock/api/users 2>&1 | grep "< HTTP"
 
 # UI
-curl -sv https://7r0mkgh9d7.execute-api.us-east-1.amazonaws.com/web/ 2>&1 | grep "< HTTP"
+curl -sv https://dev.zamait.in/web/ 2>&1 | grep "< HTTP"
 ```
 
 ---
@@ -404,7 +435,7 @@ curl -sv https://7r0mkgh9d7.execute-api.us-east-1.amazonaws.com/web/ 2>&1 | grep
 
 | Symptom | Likely Cause | Fix |
 |---------|-------------|-----|
-| `403 Forbidden` from API Gateway | No matching route / VPC Link not ready | Check route keys with `aws apigatewayv2 get-routes --api-id 7r0mkgh9d7`; wait for VPC Link to become `AVAILABLE` |
+| `403 Forbidden` from API Gateway | No matching route / VPC Link not ready | Check route keys with `aws apigatewayv2 get-routes --api-id efbt5187l6`; wait for VPC Link to become `AVAILABLE` |
 | `404` from Traefik | Host header mismatch | Confirm `overwrite:header.Host` matches the IngressRoute `Host()` rule |
 | `ImagePullBackOff` | Wrong image platform (ARM vs AMD64) | Rebuild with `--platform linux/amd64` using `docker buildx` |
 | Pod stuck in `Pending` | Insufficient node capacity | Check `kubectl describe pod <name> -n <ns>` for scheduling events |

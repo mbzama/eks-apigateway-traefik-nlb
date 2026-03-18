@@ -62,7 +62,7 @@ resource "aws_security_group" "eks_nodes" {
 resource "aws_security_group_rule" "eks_nodes_self" {
   type              = "ingress"
   from_port         = 0
-  to_port           = 65535
+  to_port           = 0
   protocol          = "-1"
   self              = true
   security_group_id = aws_security_group.eks_nodes.id

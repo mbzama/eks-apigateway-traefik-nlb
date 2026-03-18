@@ -55,8 +55,10 @@ The app will be available at [http://localhost:3000](http://localhost:3000).
 ### Build the image
 
 ```bash
-docker build -t mock-web .
+docker buildx build --platform linux/amd64 -t mock-web .
 ```
+
+> `--platform linux/amd64` is required when building on Apple Silicon (arm64) for deployment to x86_64 hosts (e.g. EKS t3.medium nodes). Omitting it produces an arm64 image that will fail with `no match for platform in manifest: not found`.
 
 ### Run the container
 
@@ -138,8 +140,8 @@ export IMAGE_TAG=v1.0.0
 ```
 
 The script will:
-1. Build the Docker image with the specified tag
-2. Push the image to Docker Hub
+1. Build the Docker image for `linux/amd64` using `docker buildx`
+2. Push both the versioned tag and `latest` to Docker Hub in a single step
 3. Output the full image reference (e.g., `your-username/mock-web:latest`)
 
 You can then pull and run the image from any environment:

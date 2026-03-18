@@ -76,6 +76,10 @@ resource "aws_nat_gateway" "main" {
   allocation_id = aws_eip.nat.id
   subnet_id     = aws_subnet.public[0].id # Placed in first public subnet
 
+  # NOTE: A single NAT gateway is used here to minimise cost for this learning
+  # environment. For production, deploy one NAT gateway per AZ to avoid a
+  # single point of failure: if us-east-1a goes down, nodes in us-east-1b
+  # lose internet access.
   tags = {
     Name = "${var.cluster_name}-nat-gw"
   }

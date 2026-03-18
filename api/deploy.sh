@@ -14,18 +14,15 @@ fi
 
 FULL_IMAGE="$DOCKERHUB_USERNAME/$IMAGE_NAME"
 
-# ── Build ─────────────────────────────────────────────────────────────────────
-echo "Building image: $FULL_IMAGE:$IMAGE_TAG ..."
-docker build --target production \
+# ── Build & Push ──────────────────────────────────────────────────────────────
+# --platform linux/amd64: EKS t3.medium nodes are x86_64; building on Apple
+# Silicon (arm64) without this flag produces an arm64 image that fails to
+# schedule with "no match for platform in manifest: not found".
+echo "Building and pushing image: $FULL_IMAGE:$IMAGE_TAG ..."
+docker buildx build --platform linux/amd64 --target production \
   -t "$FULL_IMAGE:$IMAGE_TAG" \
   -t "$FULL_IMAGE:latest" \
+  --push \
   .
-
-# ── Push ──────────────────────────────────────────────────────────────────────
-echo "Pushing $FULL_IMAGE:$IMAGE_TAG ..."
-docker push "$FULL_IMAGE:$IMAGE_TAG"
-
-echo "Pushing $FULL_IMAGE:latest ..."
-docker push "$FULL_IMAGE:latest"
 
 echo "Done. Image pushed to Docker Hub: $FULL_IMAGE:$IMAGE_TAG"

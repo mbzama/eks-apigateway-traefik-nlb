@@ -23,7 +23,14 @@ A NestJS mock API and Next.js UI deployed on AWS EKS, routed through Traefik ing
 flowchart TD
     Client([Internet / Client])
 
+    subgraph DNS["DNS — GoDaddy (zamait.in)"]
+        CNAME["dev.zamait.in\nCNAME → d-4nqab4md2f.execute-api.us-east-1.amazonaws.com"]
+    end
+
     subgraph AWS["AWS — us-east-1"]
+
+        ACM["ACM Certificate\ndev.zamait.in\n(TLS 1.2, REGIONAL)"]
+        CustomDomain["API Gateway Custom Domain\ndev.zamait.in"]
 
         APIGW["API Gateway v2 (HTTP)\nhrms-api-gateway\nANY /mock/{proxy+}\nANY /web/{proxy+}"]
 
@@ -60,8 +67,10 @@ flowchart TD
         ECR["ECR Repository\nmock-api"]
     end
 
-    Client -->|"HTTPS GET /mock/api/users"| APIGW
-    Client -->|"HTTPS GET /web/"| APIGW
+    Client -->|"HTTPS GET dev.zamait.in/mock/api/users"| CNAME
+    CNAME -->|"resolves to"| CustomDomain
+    ACM -->|"TLS termination"| CustomDomain
+    CustomDomain -->|"API mapping ($default stage)"| APIGW
     APIGW -->|"Host: api.app-dev.example.com\npath: /mock/{proxy} → /{proxy}"| VPCLink
     APIGW -->|"Host: web.app-dev.example.com\npath: /web/{proxy} → /{proxy}"| VPCLink
     VPCLink -->|"port 80"| NLB

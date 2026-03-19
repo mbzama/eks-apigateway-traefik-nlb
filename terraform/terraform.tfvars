@@ -42,6 +42,7 @@ ui_replicas  = 1
 ui_host      = "web.app-dev.example.com"
 
 # API Gateway
-api_gateway_name = "hrms-api-gateway"
-custom_domain_name  = "dev.zamait.in"
-acm_certificate_arn = "arn:aws:acm:us-east-1:805702559304:certificate/d57a2150-bbe6-49e5-94b3-de1bc26dc219"
+api_gateway_name       = "hrms-api-gateway"
+custom_domain_name     = "dev.zamait.in"
+acm_certificate_domain = "*.zamait.in"   # wildcard cert covers dev.zamait.in
+acm_certificate_arn    = "arn:aws:acm:us-east-1:608283508317:certificate/f8d2b151-8f46-47ca-b9e0-506caffaf392"

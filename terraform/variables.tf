@@ -125,11 +125,9 @@ variable "app_namespace" {
 }
 
 variable "app_image" {
-  description = "Full container image URI for the NestJS app (e.g. <account>.dkr.ecr.us-east-1.amazonaws.com/mock-api:latest)"
+  description = "Docker Hub image for the NestJS mock-api (e.g. zamamb/mock-api:latest)"
   type        = string
-  # No default – must be set after building and pushing to ECR.
-  # Set this in terraform.tfvars once the image is pushed.
-  default = "placeholder/mock-api:latest"
+  default     = "zamamb/mock-api:latest"
 }
 
 variable "app_replicas" {
@@ -187,7 +185,13 @@ variable "custom_domain_name" {
 }
 
 variable "acm_certificate_arn" {
-  description = "ACM certificate ARN for the custom domain (required when custom_domain_name is set)"
+  description = "ACM certificate ARN for the custom domain. Leave empty to auto-discover via ACM data source using acm_certificate_domain."
+  type        = string
+  default     = ""
+}
+
+variable "acm_certificate_domain" {
+  description = "Domain pattern to search in ACM when acm_certificate_arn is not set. Use '*.zamait.in' to find the wildcard cert that covers dev.zamait.in. Defaults to custom_domain_name when empty."
   type        = string
   default     = ""
 }

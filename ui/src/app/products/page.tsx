@@ -1,51 +1,64 @@
-'use client'
+interface Product {
+  id: number
+  name: string
+  price: number
+  category: string
+  inStock: boolean
+}
 
-import { products } from '@/data/products'
-import Image from 'next/image'
+async function getProducts(): Promise<Product[]> {
+  const url = process.env.API_URL
+    ? `${process.env.API_URL}/api/products`
+    : 'http://mock-api.mock-api.svc.cluster.local/api/products'
 
-export default function ProductsPage() {
+  const res = await fetch(url, { cache: 'no-store' })
+  if (!res.ok) throw new Error(`Failed to fetch products: ${res.status}`)
+  return res.json()
+}
+
+export default async function ProductsPage() {
+  const products = await getProducts()
+
   return (
     <div>
       <h1 className="text-4xl font-bold mb-8">Products</h1>
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {products.map((product) => (
-          <div key={product.id} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden hover:shadow-lg transition-shadow">
-            <div className="w-full h-48 bg-gray-100 dark:bg-gray-800 relative">
-              <Image
-                src={product.image}
-                alt={product.name}
-                fill
-                className="object-cover"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none'
-                }}
-              />
-            </div>
-            <div className="p-4">
-              <p className="text-sm text-indigo-600 dark:text-indigo-400 font-semibold mb-1">
-                {product.category}
-              </p>
-              <h3 className="text-lg font-semibold mb-2">{product.name}</h3>
-              <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">
-                {product.description}
-              </p>
-              <div className="flex justify-between items-center">
-                <span className="text-2xl font-bold text-indigo-600">
-                  ${product.price}
-                </span>
-                <button className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-semibold transition-colors">
-                  Add to Cart
-                </button>
-              </div>
-              {product.stock <= 10 && product.stock > 0 && (
-                <p className="mt-2 text-sm text-orange-500">Only {product.stock} left in stock</p>
-              )}
-              {product.stock === 0 && (
-                <p className="mt-2 text-sm text-red-500">Out of stock</p>
-              )}
-            </div>
-          </div>
-        ))}
+      <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+        <table className="w-full text-sm text-left">
+          <thead className="bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 uppercase text-xs">
+            <tr>
+              <th className="px-6 py-3">ID</th>
+              <th className="px-6 py-3">Name</th>
+              <th className="px-6 py-3">Category</th>
+              <th className="px-6 py-3">Price</th>
+              <th className="px-6 py-3">In Stock</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+            {products.map((product) => (
+              <tr key={product.id} className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                <td className="px-6 py-4 text-gray-500">{product.id}</td>
+                <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{product.name}</td>
+                <td className="px-6 py-4">
+                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300">
+                    {product.category}
+                  </span>
+                </td>
+                <td className="px-6 py-4 font-semibold text-indigo-600">${product.price.toFixed(2)}</td>
+                <td className="px-6 py-4">
+                  {product.inStock ? (
+                    <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300">
+                      In Stock
+                    </span>
+                  ) : (
+                    <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300">
+                      Out of Stock
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   )

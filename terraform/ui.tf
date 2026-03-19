@@ -63,7 +63,7 @@ resource "kubernetes_deployment" "mock_web" {
 
           readiness_probe {
             http_get {
-              path = "/"
+              path = "/web"
               port = 3000
             }
             initial_delay_seconds = 10
@@ -72,7 +72,7 @@ resource "kubernetes_deployment" "mock_web" {
 
           liveness_probe {
             http_get {
-              path = "/"
+              path = "/web"
               port = 3000
             }
             initial_delay_seconds = 20

@@ -112,11 +112,6 @@ resource "aws_iam_role_policy_attachment" "eks_cni_policy" {
   role       = aws_iam_role.eks_nodes.name
 }
 
-# Read-only ECR access so nodes can pull container images
-resource "aws_iam_role_policy_attachment" "eks_ecr_readonly" {
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
-  role       = aws_iam_role.eks_nodes.name
-}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # EKS Managed Node Group
@@ -149,6 +144,5 @@ resource "aws_eks_node_group" "main" {
   depends_on = [
     aws_iam_role_policy_attachment.eks_worker_node_policy,
     aws_iam_role_policy_attachment.eks_cni_policy,
-    aws_iam_role_policy_attachment.eks_ecr_readonly,
   ]
 }

@@ -45,36 +45,6 @@ output "public_subnet_ids" {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ECR Outputs
-# ─────────────────────────────────────────────────────────────────────────────
-output "ecr_repository_url" {
-  description = "ECR repository URL for the mock-api image"
-  value       = aws_ecr_repository.mock_api.repository_url
-}
-
-output "ecr_push_commands" {
-  description = "Commands to authenticate, build, tag, and push the mock-api image"
-  value       = <<-EOT
-    # 1. Authenticate Docker to ECR
-    aws ecr get-login-password --region ${var.aws_region} | \
-      docker login --username AWS --password-stdin \
-      ${split("/", aws_ecr_repository.mock_api.repository_url)[0]}
-
-    # 2. Build the image
-    docker build -t mock-api ../api
-
-    # 3. Tag
-    docker tag mock-api:latest ${aws_ecr_repository.mock_api.repository_url}:latest
-
-    # 4. Push
-    docker push ${aws_ecr_repository.mock_api.repository_url}:latest
-
-    # 5. Update app_image in terraform.tfvars, then re-run:
-    #    terraform apply
-  EOT
-}
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Traefik / NLB Outputs
 # ─────────────────────────────────────────────────────────────────────────────
 output "traefik_nlb_dns" {
@@ -102,7 +72,12 @@ output "api_gateway_endpoint" {
 
 output "api_gateway_domain_name" {
   description = "Regional domain name to CNAME/ALIAS for the custom domain (if configured)"
-  value       = var.custom_domain_name != "" ? aws_apigatewayv2_domain_name.main[0].domain_name_configuration[0].target_domain_name : "Custom domain not configured"
+  value       = length(aws_apigatewayv2_domain_name.main) > 0 ? aws_apigatewayv2_domain_name.main[0].domain_name_configuration[0].target_domain_name : "Custom domain not configured"
+}
+
+output "acm_certificate_arn_used" {
+  description = "ACM certificate ARN attached to the API Gateway custom domain"
+  value       = var.custom_domain_name != "" ? local.resolved_certificate_arn : "No custom domain configured"
 }
 
 output "ui_endpoint" {

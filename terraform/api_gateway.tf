@@ -94,10 +94,9 @@ resource "aws_apigatewayv2_integration" "traefik_ui" {
   connection_type = "VPC_LINK"
   connection_id   = aws_apigatewayv2_vpc_link.main.id
 
-  # Strip the /web prefix: /web/{proxy+} → /{proxy+}
-  # Set Host header so Traefik IngressRoute matches the UI service
+  # Do NOT rewrite the path — Next.js basePath '/web' needs the full path.
+  # Only override the Host header so Traefik routes to the UI service.
   request_parameters = {
-    "overwrite:path"        = "/$request.path.proxy"
     "overwrite:header.Host" = var.ui_host
   }
 
@@ -105,11 +104,21 @@ resource "aws_apigatewayv2_integration" "traefik_ui" {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Route – ANY /web/{proxy+}
+# Routes – /web and /web/{proxy+}
 #
-# Matches any HTTP method and any path under /web/.
-# Example: GET /web/products  →  integration above  →  Traefik  →  mock-web
+# Two routes are needed because {proxy+} requires at least one segment:
+#   ANY /web         → matches exactly /web  (Next.js basePath root)
+#   ANY /web/{proxy+} → matches /web/products, /web/_next/static/…, etc.
+#
+# The full path is forwarded unchanged so Next.js (basePath '/web') can
+# match its own routes and serve static assets at /web/_next/static/…
 # ─────────────────────────────────────────────────────────────────────────────
+resource "aws_apigatewayv2_route" "web_root" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "ANY /web"
+  target    = "integrations/${aws_apigatewayv2_integration.traefik_ui.id}"
+}
+
 resource "aws_apigatewayv2_route" "web_proxy" {
   api_id    = aws_apigatewayv2_api.main.id
   route_key = "ANY /web/{proxy+}"
@@ -161,13 +170,44 @@ resource "aws_apigatewayv2_stage" "default" {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ACM Certificate Lookup  (used only when custom_domain_name is set)
+#
+# If acm_certificate_arn is left empty, Terraform looks up the certificate by
+# domain in ACM.  Set acm_certificate_domain = "*.zamait.in" to find the
+# wildcard cert that covers dev.zamait.in (and any other subdomain).
+# Falls back to custom_domain_name when acm_certificate_domain is not set.
+# Supply acm_certificate_arn explicitly in tfvars to skip the lookup entirely.
+# ─────────────────────────────────────────────────────────────────────────────
+locals {
+  # Domain used for the ACM data-source lookup; wildcard takes precedence.
+  cert_lookup_domain = var.acm_certificate_domain != "" ? var.acm_certificate_domain : var.custom_domain_name
+}
+
+data "aws_acm_certificate" "api_gateway" {
+  count = var.custom_domain_name != "" && var.acm_certificate_arn == "" ? 1 : 0
+
+  domain      = local.cert_lookup_domain
+  statuses    = ["ISSUED"]
+  most_recent = true
+}
+
+locals {
+  # Use the explicitly-provided ARN when set; fall back to the data-source lookup.
+  resolved_certificate_arn = (
+    var.acm_certificate_arn != ""
+    ? var.acm_certificate_arn
+    : (var.custom_domain_name != "" ? data.aws_acm_certificate.api_gateway[0].arn : "")
+  )
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Custom Domain  (optional)
 #
-# Uncomment / set custom_domain_name and acm_certificate_arn in tfvars
-# to enable a vanity domain such as api.app-dev.example.com.
-# Requires an ACM certificate (must be in us-east-1).
-# After apply, create a CNAME or ALIAS record in Route53 pointing
-# to the api_gateway_domain_name output value.
+# Set custom_domain_name in tfvars to enable a vanity domain.
+# Either supply acm_certificate_arn directly, or leave it empty and let the
+# data source above find the ISSUED certificate for that domain automatically.
+# After apply, create a CNAME or ALIAS record in Route53 pointing to the
+# api_gateway_domain_name output value.
 # ─────────────────────────────────────────────────────────────────────────────
 resource "aws_apigatewayv2_domain_name" "main" {
   count = var.custom_domain_name != "" ? 1 : 0
@@ -175,7 +215,7 @@ resource "aws_apigatewayv2_domain_name" "main" {
   domain_name = var.custom_domain_name
 
   domain_name_configuration {
-    certificate_arn = var.acm_certificate_arn
+    certificate_arn = local.resolved_certificate_arn
     endpoint_type   = "REGIONAL"
     security_policy = "TLS_1_2"
   }

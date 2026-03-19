@@ -30,8 +30,8 @@ flowchart TD
         CustomDomain["API Gateway Custom Domain\ndev.zamait.in"]
 
         subgraph APIGW_BOX["API Gateway v2  —  hrms-api-gateway"]
-            MOCK_ROUTE["📦 /mock route\nANY /mock/{proxy+}\nrewrite: /mock/{proxy} → /{proxy}\nHost → api.app-dev.example.com"]
-            WEB_ROUTE["🖥️ /web route\nANY /web  ·  ANY /web/{proxy+}\npath forwarded as-is\nHost → web.app-dev.example.com"]
+            MOCK_ROUTE["📦 ANY /mock/{proxy+}\nrewrite path: /{proxy}\nHost: api.app-dev.example.com"]
+            WEB_ROUTE["🖥️ ANY /web  ·  ANY /web/{proxy+}\npath forwarded as-is\nHost: web.app-dev.example.com"]
         end
 
         subgraph VPC["VPC  —  10.0.0.0/16"]
@@ -76,20 +76,17 @@ flowchart TD
     CustomDomain            --> MOCK_ROUTE
     CustomDomain            --> WEB_ROUTE
 
-    %% ── /mock flow  (①–⑤) ──────────────────────────────────────────────────
-    MOCK_ROUTE              -->|"① VPC Link"| VPCLink
-    VPCLink                 -->|"② port 80"| NLB
-    NLB                     -->|"③ NodePort"| Traefik
-    Traefik                 -->|"④ Host=api.app-dev.example.com\n   PathPrefix=/api"| AppSVC
-    AppSVC                  -->|"⑤"| App
+    %% ── /mock flow ───────────────────────────────────────────────────────────
+    MOCK_ROUTE              -->|"VPC Link"| VPCLink
+    VPCLink                 -->|"port 80"| NLB
+    NLB                     -->|"NodePort"| Traefik
+    Traefik                 -->|"Host=api.app-dev.example.com\nPathPrefix=/api"| AppSVC
+    AppSVC                  --> App
 
-    %% ── /web flow  (①–⑤) ───────────────────────────────────────────────────
-    WEB_ROUTE               -->|"① VPC Link"| VPCLink
-    Traefik                 -->|"④ Host=web.app-dev.example.com"| UISVC
-    UISVC                   -->|"⑤"| UI
-
-    %% ── Internal SSR call: Next.js → mock-api (bypasses API Gateway) ────────
-    UI                      -.->|"⑥ SSR fetch\nhttp://mock-api.mock-api\n.svc.cluster.local/api/products"| AppSVC
+    %% ── /web flow ────────────────────────────────────────────────────────────
+    WEB_ROUTE               -->|"VPC Link"| VPCLink
+    Traefik                 -->|"Host=web.app-dev.example.com"| UISVC
+    UISVC                   --> UI
 
     %% ── Egress: image pulls ──────────────────────────────────────────────────
     Private                 -->|"outbound"| NAT

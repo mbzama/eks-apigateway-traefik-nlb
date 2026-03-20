@@ -61,7 +61,7 @@ variable "cluster_version" {
 variable "node_group_name" {
   description = "Name of the EKS managed node group"
   type        = string
-  default     = "hrms-ng-2"
+  default     = "hrms-ng-3"
 }
 
 variable "node_instance_type" {
@@ -85,7 +85,7 @@ variable "node_min_size" {
 variable "node_max_size" {
   description = "Maximum number of worker nodes"
   type        = number
-  default     = 1
+  default     = 2
 }
 
 variable "node_disk_size" {

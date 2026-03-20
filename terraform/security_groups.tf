@@ -53,8 +53,12 @@ resource "aws_security_group" "eks_nodes" {
   }
 
   tags = {
-    Name                                        = "${var.cluster_name}-nodes-sg"
-    "kubernetes.io/cluster/${var.cluster_name}" = "owned"
+    Name = "${var.cluster_name}-nodes-sg"
+    # Do NOT add "kubernetes.io/cluster/<name>" = "owned" here.
+    # EKS automatically tags its managed cluster security group with that key.
+    # The in-tree cloud controller requires exactly one SG per node to carry
+    # that tag; a second tagged SG causes "Multiple tagged security groups"
+    # and blocks NLB provisioning.
   }
 }
 

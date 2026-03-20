@@ -112,6 +112,49 @@ resource "aws_iam_role_policy_attachment" "eks_cni_policy" {
   role       = aws_iam_role.eks_nodes.name
 }
 
+# Allows nodes to pull images from ECR (required for system pods like aws-node, kube-proxy)
+resource "aws_iam_role_policy_attachment" "eks_ecr_read_only" {
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+  role       = aws_iam_role.eks_nodes.name
+}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Launch Template – attaches the custom node SG and configures disk size.
+# disk_size must be set here (not on aws_eks_node_group) when using a
+# launch template — the two are mutually exclusive.
+# ─────────────────────────────────────────────────────────────────────────────
+resource "aws_launch_template" "eks_nodes" {
+  name_prefix = "${var.cluster_name}-node-lt-"
+
+  # Attach both security groups:
+  # 1. eks_cluster.main cluster_security_group_id – the EKS-managed SG that
+  #    enables control-plane ↔ node communication (kubelet, etc.). When using
+  #    a launch template, EKS no longer attaches this automatically, so we
+  #    must include it explicitly or nodes fail to join the cluster.
+  # 2. eks_nodes – our custom SG with the additional ingress rules.
+  vpc_security_group_ids = [
+    aws_eks_cluster.main.vpc_config[0].cluster_security_group_id,
+    aws_security_group.eks_nodes.id,
+  ]
+
+  block_device_mappings {
+    device_name = "/dev/xvda"
+
+    ebs {
+      volume_size           = var.node_disk_size
+      volume_type           = "gp2"
+      delete_on_termination = true
+    }
+  }
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = {
+      Name = "${var.cluster_name}-node"
+    }
+  }
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # EKS Managed Node Group
@@ -125,7 +168,13 @@ resource "aws_eks_node_group" "main" {
   subnet_ids = aws_subnet.private[*].id
 
   instance_types = [var.node_instance_type]
-  disk_size      = var.node_disk_size
+  # disk_size is omitted here – configured in the launch template above.
+  # Setting disk_size directly on the node group conflicts with launch_template.
+
+  launch_template {
+    id      = aws_launch_template.eks_nodes.id
+    version = aws_launch_template.eks_nodes.latest_version
+  }
 
   scaling_config {
     desired_size = var.node_desired_size
@@ -133,8 +182,11 @@ resource "aws_eks_node_group" "main" {
     max_size     = var.node_max_size
   }
 
+  # max_unavailable_percentage avoids a deadlock when max_size == desired_size == 1.
+  # With a fixed max_unavailable = 1 and only 1 node, EKS terminates the sole
+  # node before launching a replacement, leaving the cluster with 0 nodes.
   update_config {
-    max_unavailable = 1
+    max_unavailable_percentage = 50
   }
 
   tags = {
@@ -144,5 +196,7 @@ resource "aws_eks_node_group" "main" {
   depends_on = [
     aws_iam_role_policy_attachment.eks_worker_node_policy,
     aws_iam_role_policy_attachment.eks_cni_policy,
+    aws_iam_role_policy_attachment.eks_ecr_read_only,
+    aws_launch_template.eks_nodes,
   ]
 }

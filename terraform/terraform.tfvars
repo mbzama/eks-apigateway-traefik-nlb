@@ -21,7 +21,7 @@ node_group_name    = "hrms-ng-2"
 node_instance_type = "t3.medium"
 node_desired_size  = 1
 node_min_size      = 1
-node_max_size      = 1
+node_max_size      = 2
 node_disk_size     = 20
 
 # Traefik
@@ -43,6 +43,8 @@ ui_host      = "web.app-dev.example.com"
 
 # API Gateway
 api_gateway_name       = "hrms-api-gateway"
-custom_domain_name     = "dev.zamait.in"
-acm_certificate_domain = "*.zamait.in"   # wildcard cert covers dev.zamait.in
-acm_certificate_arn    = "arn:aws:acm:us-east-1:608283508317:certificate/f8d2b151-8f46-47ca-b9e0-506caffaf392"
+# Custom domain disabled: ACM certificate was from a different AWS account.
+# Set custom_domain_name and acm_certificate_arn when the correct cert is available.
+custom_domain_name     = ""
+acm_certificate_domain = ""
+acm_certificate_arn    = ""

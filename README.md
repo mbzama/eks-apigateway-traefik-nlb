@@ -363,6 +363,59 @@ Base URL: `https://dev.zamait.in/web`
 | `/web/products` | Products table — live data from internal API |
 | `/web/cart` | Shopping cart |
 
+### Products API — `API_URL` environment variable
+
+The `/web/products` page is a Next.js Server Component. It resolves the API base URL at runtime using the `API_URL` environment variable:
+
+```
+API_URL set     →  ${API_URL}/api/products
+API_URL not set →  http://mock-api.mock-api.svc.cluster.local/api/products  (default)
+```
+
+**Default (recommended):** leave `API_URL` unset. The pod calls the mock-api ClusterIP directly — no egress, no API Gateway cost, ~1 ms latency.
+
+**Override via `API_URL`:** set this when you want the UI to call a different API endpoint (e.g. a staging URL or the public API Gateway URL for local development).
+
+#### Option 1 — Set in `terraform/ui.tf` (persisted in infra)
+
+Add an `env` block inside the `container` spec:
+
+```hcl
+env {
+  name  = "API_URL"
+  value = "https://dev.zamait.in/mock"
+}
+```
+
+Then re-apply:
+
+```bash
+cd terraform && terraform apply
+```
+
+#### Option 2 — Patch the running deployment (temporary)
+
+```bash
+kubectl set env deployment/mock-web -n mock-web API_URL=https://dev.zamait.in/mock
+kubectl rollout status deployment/mock-web -n mock-web
+```
+
+Remove the override to revert to the internal default:
+
+```bash
+kubectl set env deployment/mock-web -n mock-web API_URL-
+```
+
+#### Option 3 — Local development (`.env.local`)
+
+Create `ui/.env.local` (never committed):
+
+```bash
+API_URL=http://localhost:3001
+```
+
+Then run `npm run dev` — Next.js picks up `.env.local` automatically.
+
 ---
 
 ## Project Structure

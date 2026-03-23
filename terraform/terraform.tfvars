@@ -43,8 +43,5 @@ ui_host      = "web.app-dev.example.com"
 
 # API Gateway
 api_gateway_name       = "hrms-api-gateway"
-# Custom domain disabled: ACM certificate was from a different AWS account.
-# Set custom_domain_name and acm_certificate_arn when the correct cert is available.
-custom_domain_name     = ""
-acm_certificate_domain = ""
-acm_certificate_arn    = ""
+custom_domain_name  = "dev.zamait.in"
+acm_certificate_arn = ""

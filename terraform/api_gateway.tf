@@ -170,29 +170,32 @@ resource "aws_apigatewayv2_stage" "default" {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# ACM Certificate Lookup  (used only when custom_domain_name is set)
+# ACM Certificate Lookup  (us-east-1, used only when custom_domain_name is set)
 #
-# If acm_certificate_arn is left empty, Terraform looks up the certificate by
-# domain in ACM.  Set acm_certificate_domain = "*.zamait.in" to find the
-# wildcard cert that covers dev.zamait.in (and any other subdomain).
-# Falls back to custom_domain_name when acm_certificate_domain is not set.
-# Supply acm_certificate_arn explicitly in tfvars to skip the lookup entirely.
+# Derives the apex domain from custom_domain_name (e.g. dev.zamait.in → zamait.in)
+# and looks up the most-recent IMPORTED, ISSUED certificate for that domain.
+# Covers both the apex and the wildcard SAN (*.zamait.in).
+#
+# Override by setting acm_certificate_arn in tfvars to skip the lookup entirely.
 # ─────────────────────────────────────────────────────────────────────────────
 locals {
-  # Domain used for the ACM data-source lookup; wildcard takes precedence.
-  cert_lookup_domain = var.acm_certificate_domain != "" ? var.acm_certificate_domain : var.custom_domain_name
+  # Extract the apex domain: last two labels of custom_domain_name.
+  # "dev.zamait.in" → ["dev","zamait","in"] → join last 2 → "zamait.in"
+  _domain_parts = var.custom_domain_name != "" ? split(".", var.custom_domain_name) : []
+  apex_domain   = var.custom_domain_name != "" ? join(".", slice(local._domain_parts, length(local._domain_parts) - 2, length(local._domain_parts))) : ""
 }
 
 data "aws_acm_certificate" "api_gateway" {
   count = var.custom_domain_name != "" && var.acm_certificate_arn == "" ? 1 : 0
 
-  domain      = local.cert_lookup_domain
-  statuses    = ["ISSUED"]
+  domain    = local.apex_domain
+  statuses  = ["ISSUED"]
+  types     = ["IMPORTED"]
+  key_types = ["RSA_1024", "RSA_2048", "RSA_3072", "RSA_4096", "EC_prime256v1", "EC_secp384r1", "EC_secp521r1"]
   most_recent = true
 }
 
 locals {
-  # Use the explicitly-provided ARN when set; fall back to the data-source lookup.
   resolved_certificate_arn = (
     var.acm_certificate_arn != ""
     ? var.acm_certificate_arn

@@ -190,8 +190,3 @@ variable "acm_certificate_arn" {
   default     = ""
 }
 
-variable "acm_certificate_domain" {
-  description = "Domain pattern to search in ACM when acm_certificate_arn is not set. Use '*.zamait.in' to find the wildcard cert that covers dev.zamait.in. Defaults to custom_domain_name when empty."
-  type        = string
-  default     = ""
-}

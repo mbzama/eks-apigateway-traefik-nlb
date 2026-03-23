@@ -15,120 +15,151 @@ A NestJS mock API and Next.js UI deployed on AWS EKS, routed through Traefik ing
 
 ## Architecture
 
+### Simple Flow
+
 ```mermaid
-flowchart TD
-    Client([🌐 Internet / Client])
-    DockerHub(["🐳 Docker Hub\nzamamb/mock-api\nzamamb/mock-web"])
+flowchart LR
+    Client(["🌐 Internet / Client"])
 
     subgraph DNS["DNS  —  zamait.in"]
-        CNAME["dev.zamait.in\nCNAME → d-9ehduw3upl.execute-api.us-east-1.amazonaws.com"]
+        DOMAIN["dev.zamait.in\nCNAME → API Gateway"]
     end
 
-    subgraph AWS["AWS  —  us-east-1"]
+    subgraph EDGE["AWS Edge"]
+        ACM["🔒 ACM\n*.zamait.in  TLS 1.2"]
+        APIGW["API Gateway v2\nhrms-api-gateway\ncustom domain: dev.zamait.in"]
+    end
 
-        ACM["🔒 ACM Certificate\n*.zamait.in  ·  imported  ·  TLS 1.2"]
-        CustomDomain["API Gateway Custom Domain\ndev.zamait.in"]
+    subgraph PRIV["AWS VPC  —  Private Network  10.0.0.0/16"]
+        VPCLink["🔗 VPC Link"]
+        NLB["⚖️ Internal NLB  :80"]
+        Traefik["Traefik Ingress\nHelm v26.1.0  ·  IngressRoute CRD"]
 
-        subgraph APIGW_BOX["API Gateway v2  —  hrms-api-gateway"]
-            MOCK_ROUTE["📦 ANY /mock/{proxy+}\nrewrite path: /{proxy}\nHost: api.app-dev.example.com"]
-            WEB_ROUTE["🖥️ ANY /web  ·  ANY /web/{proxy+}\npath forwarded as-is\nHost: web.app-dev.example.com"]
-        end
-
-        subgraph VPC["VPC  —  hrms-cluster-vpc  ·  10.0.0.0/16  ·  DNS support & hostnames enabled"]
-
-            IGW["🌐 Internet Gateway\nhrms-cluster-igw"]
-            EIP["📌 Elastic IP\nhrms-cluster-nat-eip"]
-
-            subgraph AZ_A["us-east-1a"]
-
-                subgraph PUB_A["🟢 Public Subnet  ·  10.0.1.0/24\nRoute Table: 0.0.0.0/0 → IGW  ·  tag: kubernetes.io/role/elb=1"]
-                    NAT["⚡ NAT Gateway\nhrms-cluster-nat-gw"]
-                end
-
-                subgraph PRI_A["🔵 Private Subnet  ·  10.0.10.0/24\nRoute Table: 0.0.0.0/0 → NAT GW  ·  tag: kubernetes.io/role/internal-elb=1"]
-                    NODE_A["🖥️ Worker Node\nt3.medium  ·  EBS 20GiB\nSG: hrms-cluster-nodes-sg"]
-                end
-
+        subgraph K8s["EKS Cluster  —  hrms-cluster  K8s 1.31"]
+            subgraph NS_API["Namespace: mock-api"]
+                AppSVC["ClusterIP  mock-api:80\nmock-api.mock-api.svc.cluster.local"]
+                API["NestJS  mock-api  :3000"]
             end
-
-            subgraph AZ_B["us-east-1b"]
-
-                subgraph PUB_B["🟢 Public Subnet  ·  10.0.2.0/24\nRoute Table: 0.0.0.0/0 → IGW  ·  tag: kubernetes.io/role/elb=1"]
-                    PUB_B_EMPTY["(no resources — single NAT GW in us-east-1a to minimize cost)"]
-                end
-
-                subgraph PRI_B["🔵 Private Subnet  ·  10.0.11.0/24\nRoute Table: 0.0.0.0/0 → NAT GW  ·  tag: kubernetes.io/role/internal-elb=1"]
-                    NODE_B["🖥️ Worker Node\nt3.medium  ·  EBS 20GiB\nSG: hrms-cluster-nodes-sg"]
-                end
-
+            subgraph NS_WEB["Namespace: mock-web"]
+                UISVC["ClusterIP  mock-web:80"]
+                UI["Next.js  mock-web  :3000\nbasePath /web"]
             end
-
-            VPCLink["🔗 VPC Link  —  hrms-cluster-vpc-link\nPrivate ENIs in private subnets\nSG: hrms-cluster-vpc-link-sg  ·  egress :80/tcp → 10.0.0.0/16"]
-
-            subgraph SGs["Security Groups"]
-                SG_CLUSTER["🔐 hrms-cluster-cluster-sg\nIngress: nodes → 0-65535/tcp  ·  Egress: all"]
-                SG_NODES["🔐 hrms-cluster-nodes-sg\nIngress: self (all)  ·  cluster → 0-65535/tcp  ·  Egress: all"]
-                SG_VPCLINK["🔐 hrms-cluster-vpc-link-sg\nEgress: :80/tcp → 10.0.0.0/16"]
-            end
-
-            NLB["⚖️ Internal NLB  :80\nprovisioned by K8s cloud controller\nspans private subnets  (us-east-1a & us-east-1b)"]
-
-            subgraph EKS["EKS Cluster  —  hrms-cluster  ·  K8s 1.31"]
-
-                EKS_CP["☁️ EKS Control Plane\n(AWS Managed)  ·  public endpoint :443\nSG: hrms-cluster-cluster-sg"]
-
-                subgraph TraefikNS["Namespace: test-system"]
-                    Traefik["Traefik  ·  Helm v26.1.0\nIngressRoute CRD router"]
-                end
-
-                subgraph AppNS["Namespace: mock-api"]
-                    AppSVC["ClusterIP  mock-api:80"]
-                    App["NestJS pod  :3000\nzamamb/mock-api:latest"]
-                end
-
-                subgraph UINS["Namespace: mock-web"]
-                    UISVC["ClusterIP  mock-web:80"]
-                    UI["Next.js pod  :3000\nzamamb/mock-web:latest\nbasePath: /web"]
-                end
-
-            end
-
         end
     end
 
-    %% ── DNS & TLS ────────────────────────────────────────────────────────────
-    Client                  -->|"HTTPS  dev.zamait.in"| CNAME
-    CNAME                   -->|"resolves to"| CustomDomain
-    ACM                     -.-|"TLS termination"| CustomDomain
+    DockerHub(["🐳 Docker Hub"])
 
-    %% ── API Gateway routing ──────────────────────────────────────────────────
-    CustomDomain            --> MOCK_ROUTE
-    CustomDomain            --> WEB_ROUTE
+    Client          -->|"HTTPS"| DOMAIN
+    DOMAIN          -->|"CNAME resolves"| APIGW
+    ACM             -.-|"TLS termination"| APIGW
+    APIGW           -->|"ANY /mock/{proxy+}\nrewrite → /{proxy}"| VPCLink
+    APIGW           -->|"ANY /web/{proxy+}"| VPCLink
+    VPCLink         -->|":80"| NLB
+    NLB             -->|"NodePort"| Traefik
+    Traefik         -->|"Host=api.*  PathPrefix=/api"| AppSVC
+    AppSVC          --> API
+    Traefik         -->|"Host=web.*"| UISVC
+    UISVC           --> UI
+    UI              -.->|"Next.js Server Component\nGET mock-api.mock-api.svc.cluster.local/api/products\nno egress  ·  ~1ms"| AppSVC
+    K8s             -.->|"image pull  via NAT"| DockerHub
+```
 
-    %% ── /mock flow ───────────────────────────────────────────────────────────
-    MOCK_ROUTE              -->|"VPC Link"| VPCLink
-    VPCLink                 -->|"port 80"| NLB
-    NLB                     -->|"NodePort"| Traefik
-    Traefik                 -->|"Host=api.app-dev.example.com\nPathPrefix=/api"| AppSVC
-    AppSVC                  --> App
+---
 
-    %% ── /web flow ────────────────────────────────────────────────────────────
-    WEB_ROUTE               -->|"VPC Link"| VPCLink
-    Traefik                 -->|"Host=web.app-dev.example.com"| UISVC
-    UISVC                   --> UI
+### Network Topology
+
+```mermaid
+flowchart TD
+    INTERNET(["🌐 Internet"])
+    APIGW_EXT["API Gateway v2\nhrms-api-gateway\nhttps://dev.zamait.in"]
+    DockerHub(["🐳 Docker Hub"])
+
+    subgraph VPC["VPC  —  hrms-cluster-vpc  ·  10.0.0.0/16  ·  DNS support & hostnames enabled"]
+
+        IGW["🌐 Internet Gateway\nhrms-cluster-igw"]
+        EIP["📌 Elastic IP\nhrms-cluster-nat-eip"]
+
+        subgraph AZ_A["us-east-1a"]
+
+            subgraph PUB_A["🟢 Public Subnet  ·  10.0.1.0/24\nRoute Table: 0.0.0.0/0 → IGW  ·  tag: kubernetes.io/role/elb=1"]
+                NAT["⚡ NAT Gateway\nhrms-cluster-nat-gw"]
+            end
+
+            subgraph PRI_A["🔵 Private Subnet  ·  10.0.10.0/24\nRoute Table: 0.0.0.0/0 → NAT GW  ·  tag: kubernetes.io/role/internal-elb=1"]
+                NODE_A["🖥️ Worker Node\nt3.medium  ·  EBS 20GiB\nSG: hrms-cluster-nodes-sg"]
+            end
+
+        end
+
+        subgraph AZ_B["us-east-1b"]
+
+            subgraph PUB_B["🟢 Public Subnet  ·  10.0.2.0/24\nRoute Table: 0.0.0.0/0 → IGW  ·  tag: kubernetes.io/role/elb=1"]
+                PUB_B_EMPTY["(no resources — single NAT GW in us-east-1a to minimize cost)"]
+            end
+
+            subgraph PRI_B["🔵 Private Subnet  ·  10.0.11.0/24\nRoute Table: 0.0.0.0/0 → NAT GW  ·  tag: kubernetes.io/role/internal-elb=1"]
+                NODE_B["🖥️ Worker Node\nt3.medium  ·  EBS 20GiB\nSG: hrms-cluster-nodes-sg"]
+            end
+
+        end
+
+        VPCLink["🔗 VPC Link  —  hrms-cluster-vpc-link\nPrivate ENIs in private subnets\nSG: hrms-cluster-vpc-link-sg  ·  egress :80/tcp → 10.0.0.0/16"]
+        NLB["⚖️ Internal NLB  :80\nK8s cloud controller  ·  spans private subnets (us-east-1a & us-east-1b)"]
+
+        subgraph EKS["EKS Cluster  —  hrms-cluster  ·  K8s 1.31"]
+
+            EKS_CP["☁️ EKS Control Plane  (AWS Managed)\npublic endpoint :443  ·  SG: hrms-cluster-cluster-sg"]
+
+            subgraph TraefikNS["Namespace: test-system"]
+                Traefik["Traefik  ·  Helm v26.1.0\nIngressRoute CRD router"]
+            end
+
+            subgraph NS_API["Namespace: mock-api"]
+                AppSVC["ClusterIP  mock-api:80\nmock-api.mock-api.svc.cluster.local"]
+                API["NestJS pod  :3000\nzamamb/mock-api:latest"]
+            end
+
+            subgraph NS_WEB["Namespace: mock-web"]
+                UISVC["ClusterIP  mock-web:80"]
+                UI["Next.js pod  :3000\nzamamb/mock-web:latest  basePath /web"]
+            end
+
+        end
+
+        subgraph SGs["Security Groups"]
+            SG_CLUSTER["🔐 hrms-cluster-cluster-sg\nIngress: nodes → 0-65535/tcp  ·  Egress: all"]
+            SG_NODES["🔐 hrms-cluster-nodes-sg\nIngress: self (all)  ·  cluster → 0-65535/tcp  ·  Egress: all"]
+            SG_VPCLINK["🔐 hrms-cluster-vpc-link-sg\nEgress: :80/tcp → 10.0.0.0/16"]
+        end
+
+    end
+
+    %% ── Inbound: /mock flow ──────────────────────────────────────────────────
+    INTERNET        -->|"HTTPS  dev.zamait.in/mock/api/..."| APIGW_EXT
+    APIGW_EXT       -->|"VPC Link  :80\nrewrite → /api/..."| VPCLink
+    VPCLink         -->|":80"| NLB
+    NLB             -->|"NodePort"| Traefik
+    Traefik         -->|"Host=api.app-dev.example.com\nPathPrefix=/api"| AppSVC
+    AppSVC          --> API
+
+    %% ── Inbound: /web flow ───────────────────────────────────────────────────
+    APIGW_EXT       -->|"VPC Link  :80\ndev.zamait.in/web/..."| VPCLink
+    Traefik         -->|"Host=web.app-dev.example.com"| UISVC
+    UISVC           --> UI
+
+    %% ── Internal: mock-web → mock-api ────────────────────────────────────────
+    UI              -.->|"Next.js Server Component\nhttp://mock-api.mock-api.svc.cluster.local/api/products\nno egress  ·  ~1ms latency"| AppSVC
 
     %% ── EKS Control Plane ────────────────────────────────────────────────────
-    EKS_CP                  -.-|"manages nodes"| NODE_A
-    EKS_CP                  -.-|"manages nodes"| NODE_B
+    EKS_CP          -.-|"manages nodes"| NODE_A
+    EKS_CP          -.-|"manages nodes"| NODE_B
 
     %% ── NAT / EIP / IGW ──────────────────────────────────────────────────────
-    EIP                     -.-|"allocated to"| NAT
-    NAT                     -->|"outbound"| IGW
-
-    %% ── Egress: image pulls ──────────────────────────────────────────────────
-    NODE_A                  -->|"outbound via NAT"| NAT
-    NODE_B                  -->|"outbound via NAT"| NAT
-    IGW                     -.->|"image pull"| DockerHub
+    EIP             -.-|"allocated to"| NAT
+    NODE_A          -->|"egress via NAT"| NAT
+    NODE_B          -->|"egress via NAT"| NAT
+    NAT             -->|"outbound"| IGW
+    IGW             -.->|"image pull"| DockerHub
 ```
 
 ---

@@ -34,36 +34,65 @@ flowchart TD
             WEB_ROUTE["🖥️ ANY /web  ·  ANY /web/{proxy+}\npath forwarded as-is\nHost: web.app-dev.example.com"]
         end
 
-        subgraph VPC["VPC  —  10.0.0.0/16"]
+        subgraph VPC["VPC  —  hrms-cluster-vpc  ·  10.0.0.0/16  ·  DNS support & hostnames enabled"]
 
-            subgraph Public["Public Subnets  —  10.0.1.0/24  ·  10.0.2.0/24"]
-                NAT[NAT Gateway]
-                IGW[Internet Gateway]
-            end
+            IGW["🌐 Internet Gateway\nhrms-cluster-igw"]
+            EIP["📌 Elastic IP\nhrms-cluster-nat-eip"]
 
-            VPCLink["VPC Link\nprivate ENIs in private subnets"]
+            subgraph AZ_A["us-east-1a"]
 
-            subgraph Private["Private Subnets  —  10.0.10.0/24  ·  10.0.11.0/24"]
-                NLB["⚖️ Internal NLB  :80\nprovisioned by K8s cloud controller"]
-
-                subgraph EKS["EKS Cluster  —  hrms-cluster  ·  K8s 1.31"]
-
-                    subgraph TraefikNS["Namespace: test-system"]
-                        Traefik["Traefik  ·  Helm v26.1.0\nIngressRoute CRD router"]
-                    end
-
-                    subgraph AppNS["Namespace: mock-api"]
-                        AppSVC["ClusterIP  mock-api:80"]
-                        App["NestJS pod  :3000\nzamamb/mock-api:latest"]
-                    end
-
-                    subgraph UINS["Namespace: mock-web"]
-                        UISVC["ClusterIP  mock-web:80"]
-                        UI["Next.js pod  :3000\nzamamb/mock-web:latest\nbasePath: /web"]
-                    end
-
+                subgraph PUB_A["🟢 Public Subnet  ·  10.0.1.0/24\nRoute Table: 0.0.0.0/0 → IGW  ·  tag: kubernetes.io/role/elb=1"]
+                    NAT["⚡ NAT Gateway\nhrms-cluster-nat-gw"]
                 end
+
+                subgraph PRI_A["🔵 Private Subnet  ·  10.0.10.0/24\nRoute Table: 0.0.0.0/0 → NAT GW  ·  tag: kubernetes.io/role/internal-elb=1"]
+                    NODE_A["🖥️ Worker Node\nt3.medium  ·  EBS 20GiB\nSG: hrms-cluster-nodes-sg"]
+                end
+
             end
+
+            subgraph AZ_B["us-east-1b"]
+
+                subgraph PUB_B["🟢 Public Subnet  ·  10.0.2.0/24\nRoute Table: 0.0.0.0/0 → IGW  ·  tag: kubernetes.io/role/elb=1"]
+                    PUB_B_EMPTY["(no resources — single NAT GW in us-east-1a to minimize cost)"]
+                end
+
+                subgraph PRI_B["🔵 Private Subnet  ·  10.0.11.0/24\nRoute Table: 0.0.0.0/0 → NAT GW  ·  tag: kubernetes.io/role/internal-elb=1"]
+                    NODE_B["🖥️ Worker Node\nt3.medium  ·  EBS 20GiB\nSG: hrms-cluster-nodes-sg"]
+                end
+
+            end
+
+            VPCLink["🔗 VPC Link  —  hrms-cluster-vpc-link\nPrivate ENIs in private subnets\nSG: hrms-cluster-vpc-link-sg  ·  egress :80/tcp → 10.0.0.0/16"]
+
+            subgraph SGs["Security Groups"]
+                SG_CLUSTER["🔐 hrms-cluster-cluster-sg\nIngress: nodes → 0-65535/tcp  ·  Egress: all"]
+                SG_NODES["🔐 hrms-cluster-nodes-sg\nIngress: self (all)  ·  cluster → 0-65535/tcp  ·  Egress: all"]
+                SG_VPCLINK["🔐 hrms-cluster-vpc-link-sg\nEgress: :80/tcp → 10.0.0.0/16"]
+            end
+
+            NLB["⚖️ Internal NLB  :80\nprovisioned by K8s cloud controller\nspans private subnets  (us-east-1a & us-east-1b)"]
+
+            subgraph EKS["EKS Cluster  —  hrms-cluster  ·  K8s 1.31"]
+
+                EKS_CP["☁️ EKS Control Plane\n(AWS Managed)  ·  public endpoint :443\nSG: hrms-cluster-cluster-sg"]
+
+                subgraph TraefikNS["Namespace: test-system"]
+                    Traefik["Traefik  ·  Helm v26.1.0\nIngressRoute CRD router"]
+                end
+
+                subgraph AppNS["Namespace: mock-api"]
+                    AppSVC["ClusterIP  mock-api:80"]
+                    App["NestJS pod  :3000\nzamamb/mock-api:latest"]
+                end
+
+                subgraph UINS["Namespace: mock-web"]
+                    UISVC["ClusterIP  mock-web:80"]
+                    UI["Next.js pod  :3000\nzamamb/mock-web:latest\nbasePath: /web"]
+                end
+
+            end
+
         end
     end
 
@@ -88,9 +117,17 @@ flowchart TD
     Traefik                 -->|"Host=web.app-dev.example.com"| UISVC
     UISVC                   --> UI
 
+    %% ── EKS Control Plane ────────────────────────────────────────────────────
+    EKS_CP                  -.-|"manages nodes"| NODE_A
+    EKS_CP                  -.-|"manages nodes"| NODE_B
+
+    %% ── NAT / EIP / IGW ──────────────────────────────────────────────────────
+    EIP                     -.-|"allocated to"| NAT
+    NAT                     -->|"outbound"| IGW
+
     %% ── Egress: image pulls ──────────────────────────────────────────────────
-    Private                 -->|"outbound"| NAT
-    NAT                     --> IGW
+    NODE_A                  -->|"outbound via NAT"| NAT
+    NODE_B                  -->|"outbound via NAT"| NAT
     IGW                     -.->|"image pull"| DockerHub
 ```
 
